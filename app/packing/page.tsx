@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { Check, Plus, ShoppingBag, Wallet, Trash2, X } from "lucide-react";
+import { Check, Plus, ShoppingBag, Wallet, Trash2, X, User, ArrowRight, Settings } from "lucide-react";
 import { clsx } from "clsx";
 import { useLocalStorage } from "@/hooks/useLocalStorage";
 
@@ -18,6 +18,25 @@ interface BudgetItem {
     cost: string;
     paid: boolean;
     amount: number;
+}
+
+// --- Walica (Group Expense) Types ---
+interface Member {
+    id: string;
+    name: string;
+}
+
+type Currency = 'JPY' | 'EUR';
+
+interface ExpenseItem {
+    id: string;
+    title: string;
+    amount: number;
+    currency: Currency;
+    paidBy: string; // memberId
+    splitWith: string[]; // memberIds
+    category: 'food' | 'transport' | 'hotel' | 'shopping' | 'other';
+    createdAt: number;
 }
 
 // --- Initial Data ---
@@ -50,10 +69,32 @@ const INITIAL_PACKING: PackingGroup[] = [
     },
 ];
 
-const INITIAL_BUDGET: BudgetItem[] = [
-    { id: '1', item: "航空券 (TK)", cost: "¥230,000", paid: true, amount: 230000 },
-    { id: '2', item: "ホテル代 (合計)", cost: "¥120,000", paid: false, amount: 120000 },
-    { id: '3', item: "現地滞在費", cost: "€500", paid: false, amount: 80000 },
+const INITIAL_MEMBERS: Member[] = [
+    { id: 'm1', name: '自分' },
+    { id: 'm2', name: 'パートナー' }
+];
+
+const INITIAL_EXPENSES: ExpenseItem[] = [
+    {
+        id: 'e1',
+        title: '航空券 (TK)',
+        amount: 230000,
+        currency: 'JPY',
+        paidBy: 'm1',
+        splitWith: ['m1', 'm2'],
+        category: 'transport',
+        createdAt: 1709251200000
+    },
+    {
+        id: 'e2',
+        title: 'ホテル代 (Deposit)',
+        amount: 120000,
+        currency: 'JPY',
+        paidBy: 'm1',
+        splitWith: ['m1', 'm2'],
+        category: 'hotel',
+        createdAt: 1709337600000
+    }
 ];
 
 export default function PackingPage() {
@@ -61,13 +102,25 @@ export default function PackingPage() {
 
     // Persistence
     const [packingList, setPackingList] = useLocalStorage<PackingGroup[]>("my-packing-list", INITIAL_PACKING);
-    const [budgetList, setBudgetList] = useLocalStorage<BudgetItem[]>("my-budget-list", INITIAL_BUDGET);
+    const [members, setMembers] = useLocalStorage<Member[]>("my-trip-members-v2", INITIAL_MEMBERS);
+    const [expenses, setExpenses] = useLocalStorage<ExpenseItem[]>("my-trip-expenses-v2", INITIAL_EXPENSES);
 
-    // Adding Item State
-    const [isAdding, setIsAdding] = useState(false);
+    // Packing State
+    const [isAddingPacking, setIsAddingPacking] = useState(false);
     const [newItemName, setNewItemName] = useState("");
     const [newItemCategory, setNewItemCategory] = useState("Essentials");
 
+    // Budget/Walica State
+    const [isAddingExpense, setIsAddingExpense] = useState(false);
+    const [newExpense, setNewExpense] = useState<Partial<ExpenseItem>>({
+        title: "", amount: 0, currency: "JPY", paidBy: "m1", splitWith: []
+    });
+
+    // Member State
+    const [isManagingMembers, setIsManagingMembers] = useState(false);
+    const [newMemberName, setNewMemberName] = useState("");
+
+    // --- Packing Handlers ---
     const toggleCheck = (categoryIdx: number, itemId: string) => {
         const newList = [...packingList];
         const category = newList[categoryIdx];
@@ -76,12 +129,10 @@ export default function PackingPage() {
         setPackingList(newList);
     };
 
-    const addItem = () => {
+    const addPackingItem = () => {
         if (!newItemName) return;
         const newList = [...packingList];
         let categoryIndex = newList.findIndex(g => g.category === newItemCategory);
-
-        // If adding to a category that doesn't strictly match translation, fallback to first (Usually Essentials/必需品)
         if (categoryIndex === -1) categoryIndex = 0;
 
         newList[categoryIndex].items.push({
@@ -92,14 +143,80 @@ export default function PackingPage() {
 
         setPackingList(newList);
         setNewItemName("");
-        setIsAdding(false);
+        setIsAddingPacking(false);
     };
 
-    const deleteItem = (categoryIdx: number, itemId: string) => {
+    const deletePackingItem = (categoryIdx: number, itemId: string) => {
         const newList = [...packingList];
         newList[categoryIdx].items = newList[categoryIdx].items.filter(i => i.id !== itemId);
         setPackingList(newList);
     };
+
+    // --- Walica Handlers ---
+    const addMember = () => {
+        if (!newMemberName) return;
+        const newMember: Member = { id: `m${Date.now()}`, name: newMemberName };
+        setMembers([...members, newMember]);
+        setNewMemberName("");
+    };
+
+    const deleteMember = (id: string) => {
+        if (members.length <= 1) {
+            alert("最低1人のメンバーが必要です");
+            return;
+        }
+        if (confirm("メンバーを削除しますか？\n(関連する精算データが不整合になる可能性があります)")) {
+            setMembers(members.filter(m => m.id !== id));
+        }
+    };
+
+    const addExpense = () => {
+        if (!newExpense.title || !newExpense.amount) return;
+        const expense: ExpenseItem = {
+            id: `e${Date.now()}`,
+            title: newExpense.title,
+            amount: Number(newExpense.amount),
+            currency: newExpense.currency || 'JPY',
+            paidBy: newExpense.paidBy || members[0].id,
+            splitWith: newExpense.splitWith && newExpense.splitWith.length > 0 ? newExpense.splitWith : members.map(m => m.id),
+            category: 'other',
+            createdAt: Date.now()
+        };
+        setExpenses([expense, ...expenses]);
+        setIsAddingExpense(false);
+        setNewExpense({ title: "", amount: 0, currency: "JPY", paidBy: members[0].id, splitWith: [] });
+    };
+
+    const deleteExpense = (id: string) => {
+        if (confirm("この項目を削除しますか？")) {
+            setExpenses(expenses.filter(e => e.id !== id));
+        }
+    };
+
+
+    // --- Calculations ---
+    const getBalances = (targetCurrency: Currency) => {
+        const stats = members.map(m => ({ ...m, paid: 0, share: 0, balance: 0 }));
+        expenses.filter(e => e.currency === targetCurrency).forEach(e => {
+            const payer = stats.find(s => s.id === e.paidBy);
+            if (payer) payer.paid += e.amount;
+
+            // Split
+            const splitCount = e.splitWith.length;
+            if (splitCount > 0) {
+                const amountPerPerson = e.amount / splitCount;
+                e.splitWith.forEach(uid => {
+                    const consumer = stats.find(s => s.id === uid);
+                    if (consumer) consumer.share += amountPerPerson;
+                });
+            }
+        });
+        stats.forEach(s => s.balance = s.paid - s.share);
+        return stats;
+    };
+
+    const jpyBalances = getBalances('JPY');
+    const eurBalances = getBalances('EUR');
 
     return (
         <div className="min-h-full bg-slate-50 pb-32">
@@ -123,7 +240,7 @@ export default function PackingPage() {
                         onClick={() => setActiveTab("budget")}
                         className={clsx("flex-1 py-2 text-sm font-medium z-10 text-center transition-colors", activeTab === "budget" ? "text-gray-900" : "text-gray-500")}
                     >
-                        Budget
+                        Expenses
                     </button>
                 </div>
             </div>
@@ -159,7 +276,7 @@ export default function PackingPage() {
                                                     <span className={clsx("ml-3 text-gray-700 font-medium transition-all", item.checked && "text-gray-400 line-through")}>{item.name}</span>
                                                 </label>
                                                 <button
-                                                    onClick={() => deleteItem(gIdx, item.id)}
+                                                    onClick={() => deletePackingItem(gIdx, item.id)}
                                                     className="text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2"
                                                 >
                                                     <Trash2 size={14} />
@@ -170,7 +287,7 @@ export default function PackingPage() {
                                 </div>
                             ))}
                             <button
-                                onClick={() => setIsAdding(true)}
+                                onClick={() => setIsAddingPacking(true)}
                                 className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 text-sm font-medium hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
                             >
                                 <Plus size={16} /> アイテムを追加
@@ -182,34 +299,108 @@ export default function PackingPage() {
                             initial={{ opacity: 0, y: 10 }}
                             animate={{ opacity: 1, y: 0 }}
                             exit={{ opacity: 0, y: -10 }}
-                            className="space-y-4"
+                            className="space-y-8"
                         >
-                            <div className="bg-gradient-to-br from-primary to-blue-600 rounded-2xl p-6 text-white shadow-lg shadow-primary/30 mb-6">
-                                <div className="flex items-center gap-2 opacity-80 mb-1">
-                                    <Wallet size={16} />
-                                    <span className="text-xs tracking-wider uppercase">予算合計 (概算)</span>
+                            {/* Settlement Summary */}
+                            <div className="bg-gradient-to-br from-gray-900 to-gray-800 rounded-2xl p-6 text-white shadow-lg overflow-hidden relative">
+                                <div className="flex justify-between items-start mb-4">
+                                    <div className="flex items-center gap-2 opacity-80">
+                                        <Wallet size={16} />
+                                        <span className="text-xs tracking-wider uppercase">Balances</span>
+                                    </div>
+                                    <button onClick={() => setIsManagingMembers(true)} className="p-1.5 bg-white/10 rounded-full hover:bg-white/20 transition">
+                                        <Settings size={14} />
+                                    </button>
                                 </div>
-                                <div className="text-3xl font-serif">¥430,000+</div>
-                                <div className="text-sm opacity-80 mt-1">航空券 + ホテル含む</div>
+
+                                <div className="space-y-3">
+                                    {/* JPY */}
+                                    <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl">
+                                        <span className="text-xs font-bold text-white/60 w-12">JPY</span>
+                                        <div className="flex-1 text-right text-sm">
+                                            {jpyBalances.filter(b => b.balance > 0).map(b => (
+                                                <div key={b.id} className="text-emerald-400">
+                                                    {b.name} gets <span className="font-mono">{Math.round(b.balance).toLocaleString()}</span>
+                                                </div>
+                                            ))}
+                                            {jpyBalances.filter(b => b.balance < 0).map(b => (
+                                                <div key={b.id} className="text-orange-400">
+                                                    {b.name} pays <span className="font-mono">{Math.abs(Math.round(b.balance)).toLocaleString()}</span>
+                                                </div>
+                                            ))}
+                                            {jpyBalances.every(b => b.balance === 0) && <span className="text-white/40">Settled</span>}
+                                        </div>
+                                    </div>
+
+                                    {/* EUR */}
+                                    {expenses.some(e => e.currency === 'EUR') && (
+                                        <div className="flex justify-between items-center bg-white/5 p-3 rounded-xl">
+                                            <span className="text-xs font-bold text-white/60 w-12">EUR</span>
+                                            <div className="flex-1 text-right text-sm">
+                                                {eurBalances.filter(b => b.balance > 0).map(b => (
+                                                    <div key={b.id} className="text-emerald-400">
+                                                        {b.name} gets <span className="font-mono">€{b.balance.toFixed(2)}</span>
+                                                    </div>
+                                                ))}
+                                                {eurBalances.filter(b => b.balance < 0).map(b => (
+                                                    <div key={b.id} className="text-orange-400">
+                                                        {b.name} pays <span className="font-mono">€{Math.abs(b.balance).toFixed(2)}</span>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
                             </div>
 
-                            {budgetList.map((item, idx) => (
-                                <div key={idx} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex justify-between items-center">
-                                    <div className="flex items-center gap-3">
-                                        <div className={clsx("w-2 h-2 rounded-full", item.paid ? "bg-emerald-400" : "bg-orange-400")} />
-                                        <span className={clsx("font-medium", item.paid ? "text-gray-400 line-through" : "text-gray-900")}>{item.item}</span>
-                                    </div>
-                                    <span className="font-mono text-gray-600">{item.cost}</span>
+                            {/* Expenses List */}
+                            <div className="space-y-3">
+                                <div className="flex justify-between items-end px-1">
+                                    <h3 className="text-xs uppercase tracking-wider text-muted font-bold">History</h3>
                                 </div>
-                            ))}
+                                {expenses.map((item) => (
+                                    <div key={item.id} className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 relative group">
+                                        <button
+                                            onClick={() => deleteExpense(item.id)}
+                                            className="absolute top-2 right-2 text-gray-300 hover:text-red-400 opacity-0 group-hover:opacity-100 transition-opacity p-2"
+                                        >
+                                            <Trash2 size={14} />
+                                        </button>
+                                        <div className="flex justify-between items-center mb-1">
+                                            <span className="font-medium text-gray-900">{item.title}</span>
+                                            <span className="font-mono text-gray-900 font-bold">
+                                                {item.currency === 'JPY' ? '¥' : '€'}
+                                                {item.amount.toLocaleString()}
+                                            </span>
+                                        </div>
+                                        <div className="flex items-center gap-2 text-xs text-gray-500">
+                                            <div className="flex items-center gap-1 bg-gray-100 px-1.5 py-0.5 rounded-md">
+                                                <User size={10} />
+                                                <span>{members.find(m => m.id === item.paidBy)?.name || 'Unknown'}</span>
+                                            </div>
+                                            <span className="text-gray-300">paid for</span>
+                                            <span>
+                                                {item.splitWith.length === members.length ? 'Everyone' : `${item.splitWith.length} people`}
+                                            </span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+
+                            <button
+                                onClick={() => setIsAddingExpense(true)}
+                                className="w-full py-3 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 text-sm font-medium hover:border-primary hover:text-primary transition-colors flex items-center justify-center gap-2"
+                            >
+                                <Plus size={16} /> 支出を追加
+                            </button>
                         </motion.div>
                     )}
                 </AnimatePresence>
             </div>
 
-            {/* Add Modal */}
+            {/* Packing Add Modal */}
             <AnimatePresence>
-                {isAdding && (
+                {isAddingPacking && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm">
                         <motion.div
                             initial={{ scale: 0.9, opacity: 0 }}
@@ -219,7 +410,7 @@ export default function PackingPage() {
                         >
                             <div className="flex justify-between items-center mb-6">
                                 <h2 className="font-serif text-xl">アイテム追加</h2>
-                                <button onClick={() => setIsAdding(false)}><X size={20} className="text-gray-400" /></button>
+                                <button onClick={() => setIsAddingPacking(false)}><X size={20} className="text-gray-400" /></button>
                             </div>
                             <div className="space-y-4">
                                 <div>
@@ -245,11 +436,131 @@ export default function PackingPage() {
                                     </select>
                                 </div>
                                 <button
-                                    onClick={addItem}
+                                    onClick={addPackingItem}
                                     className="w-full py-4 bg-primary text-white font-medium rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform"
                                 >
                                     追加
                                 </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Expense Add Modal */}
+            <AnimatePresence>
+                {isAddingExpense && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl"
+                        >
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="font-serif text-xl">記録を追加</h2>
+                                <button onClick={() => setIsAddingExpense(false)}><X size={20} className="text-gray-400" /></button>
+                            </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">内容</label>
+                                    <input
+                                        value={newExpense.title}
+                                        onChange={(e) => setNewExpense({ ...newExpense, title: e.target.value })}
+                                        placeholder="例: ランチ"
+                                        className="w-full p-3 bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                    />
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">金額</label>
+                                        <input
+                                            type="number"
+                                            value={newExpense.amount || ''}
+                                            onChange={(e) => setNewExpense({ ...newExpense, amount: Number(e.target.value) })}
+                                            className="w-full p-3 bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        />
+                                    </div>
+                                    <div className="w-24">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">通貨</label>
+                                        <select
+                                            value={newExpense.currency}
+                                            onChange={(e) => setNewExpense({ ...newExpense, currency: e.target.value as Currency })}
+                                            className="w-full p-3 bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        >
+                                            <option value="JPY">JPY</option>
+                                            <option value="EUR">EUR</option>
+                                        </select>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <div className="flex-1">
+                                        <label className="text-xs font-bold text-gray-400 uppercase tracking-wider block mb-1">支払った人</label>
+                                        <select
+                                            value={newExpense.paidBy}
+                                            onChange={(e) => setNewExpense({ ...newExpense, paidBy: e.target.value })}
+                                            className="w-full p-3 bg-gray-50 rounded-xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        >
+                                            {members.map(m => (
+                                                <option key={m.id} value={m.id}>{m.name}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={addExpense}
+                                    className="w-full py-4 bg-primary text-white font-medium rounded-xl shadow-lg shadow-primary/20 active:scale-95 transition-transform"
+                                >
+                                    登録
+                                </button>
+                            </div>
+                        </motion.div>
+                    </div>
+                )}
+            </AnimatePresence>
+
+            {/* Member Management Modal */}
+            <AnimatePresence>
+                {isManagingMembers && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm">
+                        <motion.div
+                            initial={{ scale: 0.9, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            exit={{ scale: 0.9, opacity: 0 }}
+                            className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl"
+                        >
+                            <div className="flex justify-between items-center mb-6">
+                                <h2 className="font-serif text-xl">メンバー設定</h2>
+                                <button onClick={() => setIsManagingMembers(false)}><X size={20} className="text-gray-400" /></button>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="space-y-2">
+                                    {members.map(m => (
+                                        <div key={m.id} className="flex justify-between items-center p-3 bg-gray-50 rounded-xl">
+                                            <span className="font-medium">{m.name}</span>
+                                            {members.length > 1 && (
+                                                <button onClick={() => deleteMember(m.id)} className="text-gray-400 hover:text-red-500">
+                                                    <Trash2 size={16} />
+                                                </button>
+                                            )}
+                                        </div>
+                                    ))}
+                                </div>
+                                <div className="flex gap-2 pt-4 border-t border-gray-100">
+                                    <input
+                                        value={newMemberName}
+                                        onChange={(e) => setNewMemberName(e.target.value)}
+                                        placeholder="新しい名前"
+                                        className="flex-1 p-3 bg-gray-50 rounded-xl border border-gray-100"
+                                    />
+                                    <button
+                                        onClick={addMember}
+                                        disabled={!newMemberName}
+                                        className="px-4 bg-gray-900 text-white rounded-xl disabled:opacity-50"
+                                    >
+                                        <Plus size={20} />
+                                    </button>
+                                </div>
                             </div>
                         </motion.div>
                     </div>

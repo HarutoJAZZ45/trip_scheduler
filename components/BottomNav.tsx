@@ -16,7 +16,7 @@ export function BottomNav() {
     const pathname = usePathname();
 
     return (
-        <nav className="absolute bottom-0 left-0 right-0 z-50">
+        <nav className="z-50 shrink-0 relative">
             {/* Glassmorphism Background */}
             <div className="absolute inset-0 bg-white/80 backdrop-blur-xl border-t border-white/20 shadow-lg" />
 

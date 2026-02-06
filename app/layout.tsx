@@ -44,9 +44,11 @@ export default function RootLayout({
       <body
         className={`${inter.variable} ${playfair.variable} antialiased bg-background text-foreground font-sans selection:bg-primary/20`}
       >
-        <div className="mx-auto max-w-md min-h-screen relative bg-white shadow-2xl overflow-hidden sm:my-8 sm:rounded-[40px] sm:h-[844px] sm:border-[8px] sm:border-gray-900 ring-2 ring-gray-900/5 sm:overflow-y-auto pb-20 no-scrollbar">
+        <div className="mx-auto max-w-md h-[100dvh] relative bg-white shadow-2xl overflow-hidden sm:my-8 sm:rounded-[40px] sm:h-[844px] sm:border-[8px] sm:border-gray-900 ring-2 ring-gray-900/5 flex flex-col">
           {/* Desktop Wrapper pretending to be an iPhone */}
-          {children}
+          <main className="flex-1 overflow-y-auto no-scrollbar relative">
+            {children}
+          </main>
           <BottomNav />
         </div>
       </body>
