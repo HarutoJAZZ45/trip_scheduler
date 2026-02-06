@@ -2,11 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Home, Calendar, Briefcase, MapPin } from "lucide-react";
+import { Calendar, Briefcase, MapPin } from "lucide-react";
 import { clsx } from "clsx";
 
 const navItems = [
-    { href: "/", label: "Home", icon: Home },
     { href: "/schedule", label: "Plan", icon: Calendar },
     { href: "/packing", label: "Pack", icon: Briefcase },
     { href: "/spots", label: "Spots", icon: MapPin },
@@ -15,6 +14,8 @@ const navItems = [
 export function BottomNav() {
     const pathname = usePathname();
 
+    if (pathname === "/") return null;
+
     return (
         <nav className="z-50 shrink-0 relative">
             {/* Glassmorphism Background */}
@@ -22,7 +23,7 @@ export function BottomNav() {
 
             <div className="relative flex justify-around items-center h-20 pb-4 safe-area-bottom">
                 {navItems.map((item) => {
-                    const isActive = pathname === item.href;
+                    const isActive = pathname === item.href || pathname.startsWith(item.href);
                     return (
                         <Link
                             key={item.href}

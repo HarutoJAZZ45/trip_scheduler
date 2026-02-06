@@ -24,6 +24,10 @@ export const metadata: Metadata = {
     statusBarStyle: "default",
     title: "Itinerary",
   },
+  icons: {
+    icon: "/icon.png",
+    apple: "/apple-touch-icon.png",
+  },
 };
 
 export const viewport: Viewport = {
