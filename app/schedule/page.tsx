@@ -43,7 +43,7 @@ const ICONS = {
 export default function SchedulePage() {
     const [schedule, setSchedule] = useTripStorage<DaySchedule[]>("my-itinerary", INITIAL_SCHEDULE);
     const [spots, setSpots] = useTripStorage<Spot[]>("saved-spots", []);
-    const [selectedDayIndex, setSelectedDayIndex] = useState(0);
+    const [selectedDayIndex, setSelectedDayIndex] = useTripStorage<number>("last-viewed-day-index", 0);
     const [isAdding, setIsAdding] = useState(false);
     const [editingEvent, setEditingEvent] = useState<ScheduleEvent | null>(null);
 
@@ -287,10 +287,17 @@ export default function SchedulePage() {
 
                                         {/* Place Link */}
                                         {event.place && (
-                                            <div className="flex items-center gap-1 text-xs text-gray-500 font-medium mb-2">
+                                            <Link
+                                                href={`/spots?city=${encodeURIComponent(
+                                                    event.spotId
+                                                        ? spots.find(s => s.id === event.spotId)?.location || ""
+                                                        : ""
+                                                )}`}
+                                                className="flex items-center gap-1 text-xs text-blue-500 hover:text-blue-600 font-medium mb-2 w-fit transition-colors"
+                                            >
                                                 <MapPin size={10} />
-                                                <span>{event.place}</span>
-                                            </div>
+                                                <span className="underline decoration-blue-500/30 underline-offset-2">{event.place}</span>
+                                            </Link>
                                         )}
                                         <p className="text-sm text-gray-500 font-light leading-relaxed whitespace-pre-wrap">
                                             {event.description}

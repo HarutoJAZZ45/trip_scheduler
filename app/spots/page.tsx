@@ -9,9 +9,15 @@ import { Spot } from "@/types/spot";
 import { ColorPicker } from "@/components/ColorPicker";
 import { DEFAULT_THEME_COLOR } from "@/constants/colors";
 
+import { useSearchParams } from "next/navigation";
+import { Suspense } from "react";
+
 const INITIAL_SPOTS: Spot[] = [];
 
-export default function SpotsPage() {
+function SpotsContent() {
+    const searchParams = useSearchParams();
+    const cityParam = searchParams.get("city");
+
     const [spots, setSpots] = useTripStorage<Spot[]>("saved-spots", INITIAL_SPOTS);
     const { getCurrentTrip } = useTrips();
     const currentTrip = getCurrentTrip();
@@ -19,8 +25,15 @@ export default function SpotsPage() {
     const defaultCity = tripDestinations[0] || "Barcelona";
 
     const [isAdding, setIsAdding] = useState(false);
-    const [filterCity, setFilterCity] = useState("All");
+    const [filterCity, setFilterCity] = useState(cityParam || "All");
     const [editingSpot, setEditingSpot] = useState<Spot | null>(null);
+
+    // Update filterCity if cityParam changes (e.g. navigating from schedule)
+    useEffect(() => {
+        if (cityParam) {
+            setFilterCity(cityParam);
+        }
+    }, [cityParam]);
 
     // Form state
     const [formData, setFormData] = useState<{ name: string, category: string, location: string, color: string }>({
@@ -244,5 +257,13 @@ export default function SpotsPage() {
                 )}
             </AnimatePresence>
         </div>
+    );
+}
+
+export default function SpotsPage() {
+    return (
+        <Suspense fallback={<div className="min-h-full bg-slate-50 pt-20 px-6 text-gray-400">Loading spots...</div>}>
+            <SpotsContent />
+        </Suspense>
     );
 }
