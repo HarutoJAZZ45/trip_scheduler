@@ -209,7 +209,7 @@ export default function SchedulePage() {
                 </div>
                 <div className="flex flex-col items-center justify-center min-h-[50vh] text-gray-400 px-6 text-center">
                     <p>この旅行の日程はまだありません。</p>
-                    <p className="text-sm mt-2">「+」ボタンから予定を追加してください。</p>
+                    <p className="text-sm mt-2">（日程を追加する機能は未実装です。テスト旅行を作成してください）</p>
                 </div>
             </div>
         );

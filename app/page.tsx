@@ -1,48 +1,19 @@
 "use client";
 
 import { motion, AnimatePresence } from "framer-motion";
-import { Plus, Calendar, MapPin, Trash2, Edit2, X, ChevronRight, Share2, Copy, Check } from "lucide-react";
+import { Plus, Calendar, MapPin, Trash2, Edit2, X, ChevronRight } from "lucide-react";
 import { useState, useEffect } from "react";
 import { useTrips, Trip } from "@/hooks/useTrip";
 import { useRouter } from "next/navigation";
 import { format, eachDayOfInterval, parseISO } from "date-fns";
 import { ColorPicker } from "@/components/ColorPicker";
 import { DEFAULT_THEME_COLOR } from "@/constants/colors";
-import { auth } from "@/lib/firebase";
-import { signInWithPopup, GoogleAuthProvider, onAuthStateChanged, User, signOut } from "firebase/auth";
 
-import { Map, User as UserIcon } from "lucide-react";
+import { Map } from "lucide-react";
 
 export default function Home() {
   const { trips, addTrip, deleteTrip, updateTrip, selectTrip } = useTrips();
   const router = useRouter();
-  const [user, setUser] = useState<User | null>(null);
-  const [mounted, setMounted] = useState(false);
-
-  const handleGoogleSignIn = async () => {
-    const provider = new GoogleAuthProvider();
-    try {
-      await signInWithPopup(auth, provider);
-    } catch (error) {
-      console.error("Google Sign-In Error:", error);
-    }
-  };
-
-  const handleSignOut = async () => {
-    try {
-      await signOut(auth);
-    } catch (error) {
-      console.error("Sign-Out Error:", error);
-    }
-  };
-
-  useEffect(() => {
-    setMounted(true);
-    const unsubscribe = onAuthStateChanged(auth, (u: User | null) => {
-      setUser(u);
-    });
-    return () => unsubscribe();
-  }, []);
   const [isAdding, setIsAdding] = useState(false);
   const [editingTrip, setEditingTrip] = useState<Trip | null>(null);
 
@@ -53,47 +24,6 @@ export default function Home() {
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [themeColor, setThemeColor] = useState(DEFAULT_THEME_COLOR);
-
-  // Join Trip State
-  const [isJoining, setIsJoining] = useState(false);
-  const [joinTripId, setJoinTripId] = useState("");
-  const [copiedId, setCopiedId] = useState<string | null>(null);
-
-  const handleCopyId = (e: React.MouseEvent, id: string) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(id);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleJoinTrip = () => {
-    if (!joinTripId.trim()) return;
-    // Check if already in list
-    if (trips.some(t => t.id === joinTripId.trim())) {
-      alert("この旅行はすでに追加されています。");
-      return;
-    }
-
-    // We add it to the 'my-trips' list (which is cloud synced to user profile)
-    // The data for the trip itself will be fetched via onSnapshot in useTripStorage
-    // once the trip is selected.
-    // For now, we need to know the title etc. to show it in the list.
-    // In a real app, we'd fetch the trip metadata first.
-    // Let's assume for now we just add the ID and let it populate or ask for a simple title.
-
-    const newTrip: Trip = {
-      id: joinTripId.trim(),
-      title: "読み込み中...", // Temporary
-      destinations: [],
-      startDate: "",
-      endDate: "",
-      themeColor: DEFAULT_THEME_COLOR
-    };
-
-    addTrip(newTrip); // This needs to be modified to accept a full Trip object for joining
-    setIsJoining(false);
-    setJoinTripId("");
-  };
 
   const handleOpenAdd = () => {
     setEditingTrip(null);
@@ -119,13 +49,13 @@ export default function Home() {
 
 
 
-  const handleSaveTrip = async () => {
+  const handleSaveTrip = () => {
     if (!title) return;
 
     if (editingTrip) {
       updateTrip(editingTrip.id, { title, destinations, startDate, endDate, themeColor });
     } else {
-      const newTripId = await addTrip({ title, destinations, startDate, endDate, themeColor });
+      const newTripId = addTrip({ title, destinations, startDate, endDate, themeColor });
 
       // Auto-generate schedule if dates are present
       if (startDate && endDate) {
@@ -141,13 +71,8 @@ export default function Home() {
             events: []
           }));
 
-          // Save to Firestore via the cloud-synced storage
           if (typeof window !== "undefined") {
-            // We need to use the trip-specific storage, but we can't call hooks here
-            // So we'll save it directly to Firestore
-            const { db } = await import("@/lib/firebase");
-            const { doc, setDoc } = await import("firebase/firestore");
-            await setDoc(doc(db, `trips/${newTripId}/data/my-itinerary`), { value: initialSchedule }, { merge: true });
+            localStorage.setItem(`trip_${newTripId}_my-itinerary`, JSON.stringify(initialSchedule));
           }
         } catch (e) {
           console.error("Invalid dates for schedule generation", e);
@@ -155,6 +80,11 @@ export default function Home() {
       }
     }
     setIsAdding(false);
+
+    // User requested reload to ensure it's added.
+    setTimeout(() => {
+      window.location.reload();
+    }, 100);
   };
 
   const handleDeleteTrip = (id: string, e: React.MouseEvent) => {
@@ -185,49 +115,6 @@ export default function Home() {
     show: { opacity: 1, y: 0 }
   };
 
-  // Show Sign-In screen if not authenticated (only after mounting to prevent hydration error)
-  if (!mounted || !user) {
-    if (!mounted) {
-      // Show loading state during hydration
-      return (
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center">
-          <div className="text-gray-400">Loading...</div>
-        </div>
-      );
-    }
-
-    return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 flex items-center justify-center px-6">
-        <motion.div
-          initial={{ scale: 0.9, opacity: 0 }}
-          animate={{ scale: 1, opacity: 1 }}
-          className="bg-white rounded-3xl p-8 shadow-2xl max-w-md w-full text-center"
-        >
-          <div className="w-20 h-20 bg-gray-900 rounded-full flex items-center justify-center mx-auto mb-6">
-            <Map size={40} className="text-white" />
-          </div>
-          <h1 className="font-serif text-3xl text-gray-900 mb-3">Trip Scheduler</h1>
-          <p className="text-gray-500 text-sm mb-8">
-            旅行の計画と共有をスマートに。<br />
-            Googleアカウントでサインインして始めましょう。
-          </p>
-          <button
-            onClick={handleGoogleSignIn}
-            className="w-full py-4 bg-gray-900 text-white font-medium rounded-2xl shadow-lg hover:scale-105 transition-transform flex items-center justify-center gap-3"
-          >
-            <svg className="w-5 h-5" viewBox="0 0 24 24">
-              <path fill="currentColor" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
-              <path fill="currentColor" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
-              <path fill="currentColor" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" />
-              <path fill="currentColor" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" />
-            </svg>
-            Sign In with Google
-          </button>
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-full bg-slate-50 pb-32 pt-12 px-6">
       <div className="flex justify-between items-end mb-8">
@@ -235,35 +122,11 @@ export default function Home() {
           <h1 className="font-serif text-3xl text-gray-900 mb-2">My Trips</h1>
           <p className="text-gray-500 text-sm">以前の旅行とこれからの計画</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="flex items-center gap-2 px-3 py-1.5 bg-white rounded-full border border-gray-100 shadow-sm">
-            {user.photoURL ? (
-              <img src={user.photoURL} alt="Profile" className="w-8 h-8 rounded-full" />
-            ) : (
-              <div className="w-8 h-8 bg-gray-900 rounded-full flex items-center justify-center text-white">
-                <UserIcon size={16} />
-              </div>
-            )}
-            <div className="text-left">
-              <div className="text-[10px] font-bold text-gray-400 uppercase tracking-tighter">Logged In</div>
-              <div className="text-[10px] text-gray-600 max-w-[100px] truncate">{user.displayName || user.email || "User"}</div>
-            </div>
-          </div>
-          <button
-            onClick={handleSignOut}
-            className="px-3 py-1.5 text-xs bg-gray-100 hover:bg-gray-200 rounded-full transition-colors"
-          >
-            Sign Out
-          </button>
-        </div>
+
       </div>
 
 
-      {!mounted ? (
-        <div className="flex items-center justify-center p-12">
-          <div className="text-gray-400">Loading trips...</div>
-        </div>
-      ) : trips.length === 0 ? (
+      {trips.length === 0 ? (
         <div className="flex flex-col items-center justify-center p-12 text-center text-gray-400">
           <div className="w-16 h-16 bg-gray-100 rounded-full flex items-center justify-center mb-4">
             <MapPin size={24} />
@@ -310,13 +173,6 @@ export default function Home() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
-                    onClick={(e) => handleCopyId(e, trip.id)}
-                    className="p-2 text-gray-300 hover:text-blue-500 transition-colors z-10 relative"
-                    title="Copy Trip ID"
-                  >
-                    {copiedId === trip.id ? <Check size={16} className="text-emerald-500" /> : <Copy size={16} />}
-                  </button>
-                  <button
                     onClick={(e) => handleOpenEdit(trip, e)}
                     className="p-2 text-gray-300 hover:text-gray-600 transition-colors z-10"
                   >
@@ -339,52 +195,13 @@ export default function Home() {
         </motion.div>
       )}
 
+      {/* FAB */}
       <button
         onClick={handleOpenAdd}
-        className="fixed bottom-24 right-6 bg-gray-900 text-white p-4 rounded-full shadow-lg shadow-gray-900/30 hover:scale-105 transition-transform z-30 flex items-center gap-2"
+        className="fixed bottom-24 right-6 bg-gray-900 text-white p-4 rounded-full shadow-lg shadow-gray-900/30 hover:scale-105 transition-transform z-30"
       >
         <Plus size={24} />
       </button>
-
-      {/* Join Button */}
-      <button
-        onClick={() => setIsJoining(true)}
-        className="fixed bottom-24 right-24 bg-white text-gray-900 p-4 rounded-full shadow-lg border border-gray-100 hover:scale-105 transition-transform z-30 flex items-center gap-2"
-      >
-        <Share2 size={24} />
-      </button>
-
-      {/* Join Modal */}
-      <AnimatePresence>
-        {isJoining && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-6 bg-black/20 backdrop-blur-sm">
-            <motion.div
-              initial={{ scale: 0.9, opacity: 0 }} animate={{ scale: 1, opacity: 1 }} exit={{ scale: 0.9, opacity: 0 }}
-              className="bg-white w-full max-w-sm rounded-3xl p-6 shadow-2xl"
-            >
-              <div className="flex justify-between items-center mb-6">
-                <h2 className="font-serif text-xl">共有された旅行に参加</h2>
-                <button onClick={() => setIsJoining(false)}><X size={20} className="text-gray-400" /></button>
-              </div>
-              <div className="space-y-4">
-                <p className="text-sm text-gray-500">参加したい旅行の「Trip ID」を入力してください。</p>
-                <input
-                  value={joinTripId}
-                  onChange={(e) => setJoinTripId(e.target.value)}
-                  placeholder="Trip ID を入力"
-                  className="w-full p-4 bg-gray-50 rounded-2xl border border-gray-100 focus:outline-none focus:ring-2 focus:ring-gray-900/10 transition-all font-mono text-xs"
-                />
-                <button
-                  onClick={handleJoinTrip}
-                  className="w-full py-4 bg-gray-900 text-white font-medium rounded-2xl shadow-lg shadow-gray-900/20 active:scale-95 transition-transform"
-                >
-                  参加する
-                </button>
-              </div>
-            </motion.div>
-          </div>
-        )}
-      </AnimatePresence>
 
       {/* Add/Edit Modal */}
       <AnimatePresence>
