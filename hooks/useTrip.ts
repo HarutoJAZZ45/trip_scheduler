@@ -34,15 +34,22 @@ const USER_SPECIFIC_KEYS = [
 export function useTripStorage<T>(key: string, initialValue: T) {
     const [currentTripId] = useLocalStorage<string | null>("current-trip-id", null);
     const [userId, setUserId] = useState<string | null>(auth.currentUser?.uid || null);
+    const [mounted, setMounted] = useState(false);
 
     // 1. Local Storage fallback
     const namespacedKey = currentTripId ? `trip_${currentTripId}_${key}` : `global_${key}`;
     const [localValue, setLocalValue] = useLocalStorage<T>(namespacedKey, initialValue);
 
     // 2. State to hold the final value (either local or cloud)
-    const [value, setValue] = useState<T>(localValue);
+    // IMPORTANT: Use initialValue during SSR to prevent hydration mismatch
+    const [value, setValue] = useState<T>(initialValue);
     const isCloudSync = CLOUD_SYNC_KEYS.includes(key);
     const skipCloudUpdate = useRef(false);
+
+    // Set mounted state after hydration
+    useEffect(() => {
+        setMounted(true);
+    }, []);
 
     useEffect(() => {
         const unsubscribe = onAuthStateChanged(auth, (user: User | null) => {
@@ -53,8 +60,13 @@ export function useTripStorage<T>(key: string, initialValue: T) {
 
     // 3. Firestore Sync Logic
     useEffect(() => {
-        if (!isCloudSync || !userId) {
+        // After mounting, load localValue first
+        if (mounted && !isCloudSync) {
             setValue(localValue);
+            return;
+        }
+
+        if (!isCloudSync || !userId || !mounted) {
             return;
         }
 
@@ -92,7 +104,7 @@ export function useTripStorage<T>(key: string, initialValue: T) {
         });
 
         return () => unsub();
-    }, [isCloudSync, userId, currentTripId, key, setLocalValue]);
+    }, [isCloudSync, userId, currentTripId, key, setLocalValue, mounted]);
 
     // 4. Update function
     const updateValue = async (newValue: T | ((prev: T) => T)) => {
