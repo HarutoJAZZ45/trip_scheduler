@@ -22,14 +22,12 @@ const CLOUD_SYNC_KEYS = [
     "saved-spots",     // Trip-shared: spots
     "trip-expenses",   // Trip-shared: expenses
     "trip-members",    // Trip-shared: members
-    "packing-list",    // User-specific: packing list (not shared)
-    "current-trip-id"  // User-specific: currently selected trip
+    "packing-list"     // User-specific: packing list (not shared)
 ];
 
 // Keys that should be stored per-user (not shared with trip collaborators)
 const USER_SPECIFIC_KEYS = [
-    "packing-list",
-    "current-trip-id"
+    "packing-list"
 ];
 
 // Wrapper for useLocalStorage that optionally syncs with Firestore
@@ -62,7 +60,7 @@ export function useTripStorage<T>(key: string, initialValue: T) {
 
         // Determine Firestore doc path
         let docPath: string | null = null;
-        if (key === "my-trips" || key === "current-trip-id") {
+        if (key === "my-trips") {
             // User profile data
             docPath = `users/${userId}/profile/${key}`;
         } else if (USER_SPECIFIC_KEYS.includes(key) && currentTripId) {
@@ -100,7 +98,7 @@ export function useTripStorage<T>(key: string, initialValue: T) {
 
         if (isCloudSync && userId && !skipCloudUpdate.current) {
             let docPath: string | null = null;
-            if (key === "my-trips" || key === "current-trip-id") {
+            if (key === "my-trips") {
                 // User profile data
                 docPath = `users/${userId}/profile/${key}`;
             } else if (USER_SPECIFIC_KEYS.includes(key) && currentTripId) {
