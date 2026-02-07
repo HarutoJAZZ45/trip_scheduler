@@ -153,11 +153,6 @@ export default function Home() {
       }
     }
     setIsAdding(false);
-
-    // User requested reload to ensure it's added.
-    setTimeout(() => {
-      window.location.reload();
-    }, 100);
   };
 
   const handleDeleteTrip = (id: string, e: React.MouseEvent) => {
